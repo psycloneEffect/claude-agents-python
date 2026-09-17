@@ -1,32 +1,30 @@
-# ---- Claude Code ----
-.claude/settings.local.json     # 個人ローカル設定。コミットしない
-.claude/agent-memory/           # 方針次第（後述）
+# This repository holds Markdown only — there is nothing to build or install.
+# Everything below is incidental cruft from operating systems and editors.
 
-# ---- Python ----
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-*.egg-info/
-dist/
-build/
-
-# ---- ツールのキャッシュ ----
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# ---- シークレット ----
-.env
-.env.*
-!.env.example
-*.pem
-credentials.json
-
-# ---- OS / エディタ ----
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# Editors
+*.swp
+*.swo
 .idea/
+*.sublime-workspace
+
+# Keep .vscode/ tracked if you want to share editor settings with contributors;
+# otherwise uncomment the line below.
+# .vscode/
