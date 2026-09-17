@@ -1,134 +1,123 @@
 # claude-agents-python
 
-Seven role-scoped Claude Code subagents for solo Python development. Write permissions are deliberately split by role — the implementer can't touch tests, the test author can't touch source — so you stay the orchestrator.
+Python個人開発向けの Claude Code サブエージェント定義集です。実装・テスト・レビュー・ドキュメントといった役割を7体のサブエージェントに分担させ、人間はOrchestrator（指揮役）として判断だけに専念できるようにします。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+役割ごとの設計意図や運用サイクルは [SETUP.md](./SETUP.md) を参照してください。このREADMEは導入手順に絞っています。
 
-## What this is
+---
 
-A set of Markdown files you drop into `.claude/agents/`. Each defines a specialist with its own system prompt, tool allowlist, and model. Claude delegates to them; you decide what gets built and which findings matter.
+## 前提条件
 
-Solo development has no second pair of eyes and no division of labor. A single agent doing everything will, sooner or later, weaken a test to make it pass or refactor something you never asked about. Splitting the work into roles with different permissions makes those failures structurally impossible rather than merely discouraged.
+| 項目 | 内容 |
+| --- | --- |
+| Claude Code | インストール済みであること（デスクトップアプリのCodeタブ、またはCLI） |
+| 認証 | Claude サブスクリプション、または `ANTHROPIC_API_KEY` |
+| 対象プロジェクト | Python。`git` 管理下だとレビュー系が本領を発揮します |
 
-## The design: asymmetric write permissions
-
-This is the part that matters more than the role names.
-
-| Agent | Can write to | Model |
-| --- | --- | --- |
-| `librarian` | nothing | sonnet |
-| `implementer` | source only | sonnet |
-| `test-author` | `tests/` only | sonnet |
-| `test-runner` | nothing | haiku |
-| `debugger` | anywhere | opus |
-| `reviewer` | nothing | opus |
-| `documenter` | docs and docstrings | sonnet |
-
-`implementer` cannot edit `tests/`, so it can never make a failing test pass by rewriting the test. `test-author` cannot edit source, so it can never bend a test to match a buggy implementation. `reviewer` and `test-runner` carry `disallowedTools: Write, Edit`, so critique stays separate from correction.
-
-When one agent holds every permission, these failures happen quietly. Separating them forces every real decision back to you.
-
-Model assignment follows the same logic: opus where judgment drives the outcome, haiku where the job is summarizing output.
-
-## Quick start
+APIキーで使う場合は、シェルの設定ファイルに以下を追加します。
 
 ```bash
-git clone https://github.com/<user>/claude-agents-python.git
-cd claude-agents-python
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
 
-# Option A — available in every project
+サブエージェントを並列で回すとトークン消費がまとまって増えます。常用するならサブスクリプション認証のほうがコストは読みやすくなります。
+
+---
+
+## インストール
+
+### 手順1. 定義ファイルを配置する
+
+配置先は2択です。両方に同名のファイルがある場合はプロジェクト側が優先されます。
+
+**A. 全プロジェクトで使う（個人用）**
+
+```bash
 mkdir -p ~/.claude/agents
 cp agents/*.md ~/.claude/agents/
+```
 
-# Option B — this project only, shareable via git
+**B. 特定プロジェクトだけで使う（gitで共有可能）**
+
+```bash
 cd /path/to/your-project
 mkdir -p .claude/agents
 cp /path/to/claude-agents-python/agents/*.md .claude/agents/
+```
+
+まずはAで入れて、プロジェクト固有の調整が必要になったらBに複製する流れが扱いやすいです。
+
+### 手順2. CLAUDE.md を置く
+
+プロジェクトルートに配置します。**このファイルは（組み込みの Explore と Plan を除く）全サブエージェントに読み込まれるため、共通規約はここに一元化します。**
+
+```bash
+cd /path/to/your-project
 cp /path/to/claude-agents-python/CLAUDE.md.template ./CLAUDE.md
 ```
 
-**Restart Claude Code after creating the `agents/` directory for the first time.** A directory that didn't exist at startup isn't watched, so the agents won't be found until you restart. Adding or editing files in an existing directory is picked up within seconds.
+コピーしたら中身を自分の環境に合わせて編集してください（後述の「環境に合わせる」を参照）。
 
-Verify with `ls .claude/agents/`, then try one:
+### 手順3. Claude Code を再起動する
 
-```
-Use the test-runner subagent to run the suite
-```
+**`agents` ディレクトリを新規に作った場合、再起動が必須です。** 起動時に存在しなかったディレクトリは監視対象に入らず、そのセッションでは認識されません。
 
-## Where the files go
+既存の `agents` ディレクトリへのファイル追加・編集であれば、数秒で自動的に反映されます。
 
-Project-level agents live at the root of the folder you open in your editor:
+### 手順4. 動作確認
 
-```
-your-project/
-├── .claude/
-│   ├── agents/          ← the seven definitions
-│   ├── agent-memory/    ← created on first use
-│   └── settings.json    ← optional, shared permissions and hooks
-├── CLAUDE.md            ← at the root, NOT inside .claude/
-├── pyproject.toml
-├── src/
-└── tests/
-```
+プロジェクトディレクトリで Claude Code を起動し、入力欄に `@` を打ちます。補完候補に `agent-librarian`、`agent-implementer` などが並べば認識されています。
 
-`CLAUDE.md` is loaded by every custom subagent (the built-in Explore and Plan agents are the exception). Put shared conventions there once rather than repeating them in each definition.
-
-If a project-level and a user-level agent share a name, the project one wins. That lets you keep a general set in `~/.claude/agents/` and override individual roles per repository.
-
-## Environment support
-
-| | `~/.claude/agents/` | `.claude/agents/` | Extra work |
-| --- | --- | --- | --- |
-| CLI | ✅ | ✅ | none |
-| VS Code extension | ✅ | ✅ | none |
-| Claude Code on the web | ❌ | ✅ | commit the files; install your toolchain in the environment setup script |
-
-Cloud sessions start from a fresh VM with your repository cloned into it, so your home directory isn't there. Commit `.claude/agents/` and `CLAUDE.md` to use these on the web. Settings that live in `~/.claude/settings.json` won't apply either — use the cloud environment's variables instead.
-
-## Working cycle
+実際に1体呼んで確かめます。
 
 ```
-You decide what to build          ← never delegated
-  ↓
-librarian     compare library options
-  ↓ you pick one
-Plan mode     agree on an approach
-  ↓ you approve
-implementer   build it
-  ↓
-test-author   write the tests
-  ↓
-test-runner   run them
-  ↓ on failure
-debugger      find the root cause  → back to test-runner
-  ↓ on green
-reviewer      critique the diff
-  ↓ you decide what to act on
-documenter    update docstrings and README
+@agent-test-runner テストを回して結果を教えて
 ```
 
-Name the subagent explicitly when it matters. Leaving the choice to Claude works, but it means the routing decision isn't yours.
+---
 
-Independent work can run in parallel:
+## 環境に合わせる
 
-```
-Investigate the auth, database, and API modules in parallel subagents
-```
+配置したままでも動きますが、以下2箇所は実環境に合わせてください。ここがズレていると、エージェントが存在しないコマンドを叩こうとします。
 
-Their reports come back into your main conversation, so running many verbose agents at once spends the context you were trying to save. Keep parallelism to genuinely independent research.
+### 1. `CLAUDE.md` のツールチェイン
 
-## Adjust for your toolchain
+テンプレートは **uv + ruff + mypy + pytest** を前提にしています。異なる場合は書き換えてください。
 
-Two places assume **uv + ruff + mypy + pytest**. If that's not your setup, change them before first use — otherwise the agents will call commands that don't exist.
+| 前提 | 使っていなければ差し替える |
+| --- | --- |
+| `uv run <cmd>` | `poetry run` / `python -m` / 素の実行 |
+| `ruff check` / `ruff format` | `black` + `flake8` + `isort` |
+| `mypy .` | `pyright` |
+| `pytest -q` | `nox` / `tox` 経由のコマンド |
 
-1. `CLAUDE.md` — the toolchain table
-2. `agents/implementer.md` — the post-implementation verification commands
+Pythonの下限バージョン、`src/` レイアウトかフラットかも実態に合わせます。
 
-Optional: `agents/documenter.md` if you use NumPy-style docstrings, `agents/test-runner.md` if you run tests through nox or tox.
+### 2. `agents/implementer.md` の「実装後に必ずやること」
 
-## Cost
+CLAUDE.md と同じコマンドに揃えます。ここだけ古いままだと、実装後の検証が空振りします。
 
-`reviewer` and `debugger` run on opus, which is where most of the spend goes. To lower everything at once, in `~/.claude/settings.json`:
+### 任意の調整
+
+- **`agents/documenter.md`** — docstringをNumPyスタイルで統一しているなら、テンプレート部分を差し替える
+- **`agents/test-runner.md`** — nox / tox 経由でテストしているなら、その実行コマンドを明記する
+- **各ファイルの `model:`** — コストを抑えたい場合は下げる（次項）
+
+---
+
+## モデルとコストの設定
+
+各定義には役割に応じたモデルを指定してあります。
+
+| エージェント | モデル | 理由 |
+| --- | --- | --- |
+| `debugger` / `reviewer` | opus | 判断の質が成果を左右する |
+| `implementer` / `test-author` / `librarian` / `documenter` | sonnet | 手順が明確 |
+| `test-runner` | haiku | 出力を要約するだけ |
+
+メインセッションはOpusで走らせ、そこで指揮に専念する想定です。
+
+一括で下げたい場合は `~/.claude/settings.json` に置きます。
 
 ```json
 {
@@ -139,67 +128,96 @@ Optional: `agents/documenter.md` if you use NumPy-style docstrings, `agents/test
 }
 ```
 
-`FORCE` overrides the `model:` field in every definition. Drop it to let each definition keep its own choice.
+`FORCE` を立てると各定義の `model:` 指定は無視され、すべて上書きされます。定義側の指定を活かしたい場合は `FORCE` を外してください。
 
-`/usage` breaks down consumption per subagent and flags subagent-heavy or highly parallel sessions, which is the fastest way to find out which of the seven is actually expensive for your workload.
+---
 
-## Accumulated knowledge
+## 基本の使い方
 
-`reviewer` and `librarian` are set to `memory: project`. Findings collect in `.claude/agent-memory/<agent>/` and carry across sessions. Commit that directory if you want it to follow you between machines; leave it ignored if you'd rather keep review notes out of the repository history.
+`@` で明示的に指名するのがOrchestratorの基本動作です。エージェント名を自然言語で言うだけだと、委譲するかどうかはClaudeの判断に委ねられ、指揮権が曖昧になります。
 
-## Enforcing the boundaries
-
-The write restrictions above are instructions, not guarantees. If you need one enforced mechanically, add a `PreToolUse` hook to that agent's frontmatter and exit with code 2 to block the call:
-
-```yaml
-hooks:
-  PreToolUse:
-    - matcher: "Edit|Write"
-      hooks:
-        - type: command
-          command: "./scripts/deny-tests-dir.sh"
+```
+@agent-implementer 承認した方針で実装して
+@agent-reviewer 今回の変更をレビューして
 ```
 
-Start without hooks. Add one only to the role that actually crosses a line.
+独立した作業は並列化できます。
 
-## Troubleshooting
+```
+認証・DB・API の3モジュールを、それぞれ別のサブエージェントで並列に調査して
+```
 
-**Agents don't show up.** You created `agents/` during a running session — restart. Then check the path and that the frontmatter's `---` fences are closed.
+一連の流れは [SETUP.md](./SETUP.md) の「1サイクルの回し方」にまとめてあります。
 
-**Delegation goes to the wrong agent.** `description` is what Claude routes on. Say when to use it, concretely. Name the agent explicitly when you need certainty.
+---
 
-**Warning about long descriptions at startup.** The combined `description` fields exceed the token budget. Move detail into the body; keep `description` to one or two sentences about when to use the agent.
+## トラブルシューティング
 
-**An agent edited something it shouldn't have.** Add a hook, as above.
+**エージェントが `@` 補完に出てこない**
+`agents` ディレクトリを新規作成した直後です。Claude Code を再起動してください。ファイルの配置先（`~/.claude/agents/` または `<project>/.claude/agents/`）と、フロントマターの `---` が正しく閉じているかも確認します。
 
-**Higher token usage than expected.** Subagent reports return to the main conversation. Reduce parallelism and prefer agents that summarize (`test-runner`) over ones that dump.
+**意図したエージェントに委譲されない**
+`description` が委譲判断の材料です。「いつ使うか」を具体的に書き、積極的に使ってほしいものには「〜のときに積極的に使う」といった表現を入れます。確実に指名したい場合は `@` を使ってください。
 
-**An agent doesn't know something obvious.** Non-forked subagents start with a clean context and no conversation history. State the premise in the request, or put it in `CLAUDE.md` if it's permanent.
+**起動時に description が長すぎると警告が出る**
+全エージェントの `description` 合計が15,000トークンを超えています。詳細は本文側に移し、`description` は「いつ使うか」の1〜2文に絞ってください。
 
-## Not included, on purpose
+**サブエージェントが禁止したはずのファイルを触った**
+`tests/ を触らない` といった指示はプロンプトによる約束であり、100%の保証ではありません。確実に止めたい場合はフロントマターに `PreToolUse` フックを追加し、対象パスへの書き込みを終了コード2でブロックします（例は SETUP.md 参照）。まずはフックなしで運用し、実際に越境が起きた役割にだけ足すのが現実的です。
 
-- **planner** — Plan mode and the built-in Plan agent cover this, and deciding the approach is the part you should keep.
-- **explorer** — the built-in Explore agent handles codebase search. `librarian` is scoped to external libraries so the two don't compete for the same delegations.
+**トークン消費が想定より多い**
+サブエージェントの報告はメインの会話に返るため、詳細な報告を返すエージェントを大量に並列実行すると、節約したはずの文脈を結局消費します。並列は独立した調査に限り、同時実行は数体に抑えてください（上限はデフォルトで同時20体、ネスト3層）。
 
-## Layout
+**サブエージェントが前提を知らない**
+非forkのサブエージェントは会話履歴を引き継がず、まっさらな文脈から始まります。必要な前提は依頼文に明示するか、恒久的なものは `CLAUDE.md` に書いてください。
+
+---
+
+## 知見を蓄積させる
+
+`reviewer` と `librarian` には `memory: project` を設定してあります。`.claude/agent-memory/<エージェント名>/` に知見が溜まり、会話をまたいで参照されます。
+
+gitにコミットすれば、マシンを変えても引き継がれます。
+
+```bash
+git add .claude/agent-memory
+```
+
+作業の区切りで明示的に促すと定着が早くなります。
+
+```
+@agent-reviewer 今回分かったプロジェクト固有のパターンをメモリに残して
+```
+
+---
+
+## アンインストール
+
+```bash
+# 個人用
+rm ~/.claude/agents/{librarian,implementer,test-author,test-runner,debugger,reviewer,documenter}.md
+
+# プロジェクト用
+rm -rf .claude/agents
+```
+
+`CLAUDE.md` と `.claude/agent-memory/` は必要に応じて別途削除してください。
+
+---
+
+## ファイル構成
 
 ```
 claude-agents-python/
-├── README.md
-├── LICENSE
-├── CLAUDE.md.template
+├── README.md              このファイル（導入手順）
+├── SETUP.md               設計意図と運用サイクル
+├── CLAUDE.md.template     プロジェクト規約のひな形
 └── agents/
-    ├── librarian.md
-    ├── implementer.md
-    ├── test-author.md
-    ├── test-runner.md
-    ├── debugger.md
-    ├── reviewer.md
-    └── documenter.md
+    ├── librarian.md       ライブラリ選定・API調査（読み取り専用）
+    ├── implementer.md     実装（tests/ は触らない）
+    ├── test-author.md     テスト作成（実装は触らない）
+    ├── test-runner.md     テスト実行と要約（読み取り専用）
+    ├── debugger.md        原因究明と最小修正
+    ├── reviewer.md        コードレビュー（読み取り専用）
+    └── documenter.md      docstring / README / CHANGELOG
 ```
-
-## License
-
-MIT — see [LICENSE](./LICENSE).
-
-These files are prompts rather than executable code, so treat them accordingly: copy them, rewrite them, strip out the parts that don't fit your workflow, and ship the result however you like. Attribution is appreciated but the license asks for little beyond keeping the copyright notice with substantial copies.
